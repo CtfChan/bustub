@@ -34,7 +34,6 @@ bool ClockReplacer::Victim(frame_id_t *frame_id) {
     while (true) {
         if (clock_[hand_idx_].second == false) {
             *frame_id = clock_[hand_idx_].first;
-            // std::cout << "EVICTIING: " <<  clock_[hand_idx_].first << std::endl;
             clock_.erase(clock_.begin() + hand_idx_);
             return true;
         } else {

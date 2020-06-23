@@ -152,6 +152,20 @@ class BufferPoolManager {
    */
   void FlushAllPagesImpl();
 
+
+  /**
+   * @brief Checks to see if all pages are pinned
+   * 
+   * @return true 
+   * @return false 
+   */
+  bool allPinned();
+
+
+  frame_id_t pickVictimPage();
+
+
+
   /** Number of pages in the buffer pool. */
   size_t pool_size_;
   /** Array of buffer pool pages. */
