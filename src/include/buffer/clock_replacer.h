@@ -16,8 +16,12 @@
 #include <mutex>  // NOLINT
 #include <vector>
 
+
+
 #include "buffer/replacer.h"
 #include "common/config.h"
+
+
 
 namespace bustub {
 
@@ -47,6 +51,13 @@ class ClockReplacer : public Replacer {
 
  private:
   // TODO(student): implement me!
+  std::vector<std::pair<frame_id_t, bool>>::iterator FindFrame(frame_id_t frame_id);
+
+  size_t max_pages_;
+  std::mutex mutex_;
+  std::vector<std::pair<frame_id_t, bool>> clock_;
+  size_t hand_idx_ = 0;
+
 };
 
 }  // namespace bustub
