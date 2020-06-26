@@ -51,13 +51,11 @@ bool ClockReplacer::Victim(frame_id_t *frame_id) {
         }
     }
 
-
     return false; 
 
 }
 
 void ClockReplacer::Pin(frame_id_t frame_id) {
-
     std::lock_guard<std::mutex> lock(mutex_);
     auto found_frame = FindFrame(frame_id);
     
