@@ -62,27 +62,62 @@ HASH_TABLE_TYPE::LinearProbeHashTable(const std::string &name, BufferPoolManager
  *****************************************************************************/
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_TYPE::GetValue(Transaction *transaction, const KeyType &key, std::vector<ValueType> *result) {
-  // read hash table header page 
+  // Rlock table_latch
+  table_latch_.RLock();
+  
+  // Rlatch header page for this hash table
+  Page* header_page = buffer_pool_manager_->FetchPage(header_page_id_);
+  header_page->RLatch();
+  HashTableHeaderPage* hash_header_page = 
+    reinterpret_cast<HashTableHeaderPage*>(header_page->GetData());
+  
+  // compute hash idx, block idx and bucket idx 
+  size_t hash_idx = hash_fn_.GetHash(key) % (BLOCK_ARRAY_SIZE * hash_header_page->NumBlocks());
+  size_t block_idx = hash_idx / BLOCK_ARRAY_SIZE;
+  size_t bucket_idx = hash_idx % BLOCK_ARRAY_SIZE;
 
-  // compute block to access and read it 
-
+  // get the block page, acquire read latch 
+  Page* block_page = buffer_pool_manager_->FetchPage(hash_header_page->GetBlockPageId(block_idx));
+  block_page->RLatch();
+  auto hash_block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(block_page->GetData());
+  
   // keep looking until blocks are no longer occupied
-
+  while (hash_block_page->IsOccupied(bucket_idx)) {
     // found page
+    if (hash_block_page->IsReadable(bucket_idx) && comparator_(hash_block_page->KeyAt(bucket_idx), key) == 0) {
+      result->push_back(hash_block_page->ValueAt(bucket_idx));
+    }
 
-    // increment bucket
+    // increment bucket_idx
+    ++bucket_idx;
 
-    // searched entire table
+    // searched entire hash table
+    if (block_idx * BLOCK_ARRAY_SIZE + bucket_idx == hash_idx) 
+      break;
 
     // reached end of block, go to new block
+    if (bucket_idx == BLOCK_ARRAY_SIZE) {
+      bucket_idx = 0;
+      block_page->RUnlatch();
 
+      buffer_pool_manager_->UnpinPage(hash_header_page->GetBlockPageId(block_idx), false);
+      block_idx = (block_idx + 1) % hash_header_page->NumBlocks();
+
+      block_page = buffer_pool_manager_->FetchPage(hash_header_page->GetBlockPageId(block_idx));
+      block_page->RLatch();
+      hash_block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(block_page->GetData());
+    }
+  }
 
   // unlatch and unpin pages used
+  block_page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(hash_header_page->GetBlockPageId(block_idx), false);
+  header_page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(header_page_id_, false);
+  table_latch_.RUnlock();
 
   // return true of false based on result
-
-
-  return false;
+  return result->empty() ? false : true;
 }
 /*****************************************************************************
  * INSERTION
@@ -179,28 +214,72 @@ bool HASH_TABLE_TYPE::Insert(Transaction *transaction, const KeyType &key, const
  *****************************************************************************/
 template <typename KeyType, typename ValueType, typename KeyComparator>
 bool HASH_TABLE_TYPE::Remove(Transaction *transaction, const KeyType &key, const ValueType &value) {
-  // read hash table header page 
+  // Rlock table_latch
+  table_latch_.RLock();
 
-  // compute block to access and read it 
+  // Rlatch header page for this hash table
+  Page* header_page = buffer_pool_manager_->FetchPage(header_page_id_);
+  header_page->RLatch();
+  HashTableHeaderPage* hash_header_page = 
+  reinterpret_cast<HashTableHeaderPage*>(header_page->GetData());
+
+  // compute hash idx, block idx and bucket idx 
+  size_t hash_idx = hash_fn_.GetHash(key) % (BLOCK_ARRAY_SIZE * hash_header_page->NumBlocks());
+  size_t block_idx = hash_idx / BLOCK_ARRAY_SIZE;
+  size_t bucket_idx = hash_idx % BLOCK_ARRAY_SIZE;
+
+  // get the block page, acquire write latch 
+  Page* block_page = buffer_pool_manager_->FetchPage(hash_header_page->GetBlockPageId(block_idx));
+  block_page->WLatch();
+  auto hash_block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(block_page->GetData());
 
   // keep looking until blocks are no longer occupied
-
-    // found page
+  while (hash_block_page->IsOccupied(bucket_idx)) {
+    // found page 
+    if (comparator_(hash_block_page->KeyAt(bucket_idx), key) == 0 && hash_block_page->ValueAt(bucket_idx) == value) {
       // block not readable -> this is an error, can't remove
-
-
+      if (hash_block_page->IsReadable(bucket_idx) == false) {
+        block_page->WUnlatch();
+        buffer_pool_manager_->UnpinPage(hash_header_page->GetBlockPageId(block_idx), true);
+        header_page->RUnlatch();
+        buffer_pool_manager_->UnpinPage(header_page_id_, false);
+        return false;
+      }
+      // can remove
+      hash_block_page->Remove(bucket_idx);
+      block_page->WUnlatch();
+      buffer_pool_manager_->UnpinPage(hash_header_page->GetBlockPageId(block_idx), true);
+      header_page->RUnlatch();
+      buffer_pool_manager_->UnpinPage(header_page_id_, false);
+      return true;
+    }
 
     // increment bucket
+    ++bucket_idx;
 
     // searched entire table
+    if (block_idx * BLOCK_ARRAY_SIZE + bucket_idx == hash_idx) 
+      break;
 
     // reached end of block, go to new block
+    if (bucket_idx == BLOCK_ARRAY_SIZE) {
+      bucket_idx = 0;
+      block_page->WUnlatch();
 
+      buffer_pool_manager_->UnpinPage(hash_header_page->GetBlockPageId(block_idx), false);
+      block_idx = (block_idx + 1) % hash_header_page->NumBlocks();
+
+      block_page = buffer_pool_manager_->FetchPage(hash_header_page->GetBlockPageId(block_idx));
+      block_page->WLatch();
+      hash_block_page = reinterpret_cast<HashTableBlockPage<KeyType, ValueType, KeyComparator> *>(block_page->GetData());
+    }
+  }
 
   // unlatch and unpin pages used
-
-  // return true of false based on result
-
+  block_page->WUnlatch();
+  buffer_pool_manager_->UnpinPage(hash_header_page->GetBlockPageId(block_idx), true);
+  header_page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(header_page_id_, false);
 
   return false;
 }

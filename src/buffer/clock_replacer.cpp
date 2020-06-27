@@ -75,7 +75,7 @@ void ClockReplacer::Unpin(frame_id_t frame_id) {
     if (found_frame == clock_.end() && clock_.size() < max_pages_) {
       clock_.emplace_back(frame_id, true);
     } else {
-        found_frame->second = true;
+      found_frame->second = true;
     }
 }
 

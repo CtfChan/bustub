@@ -17,17 +17,11 @@ namespace bustub {
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 KeyType HASH_TABLE_BLOCK_TYPE::KeyAt(slot_offset_t bucket_ind) const {
-  if (IsReadable(bucket_ind) == false) {
-    throw std::runtime_error("Bucket " + std::to_string(bucket_ind) + " is not readable!");
-  }
   return array_[bucket_ind].first;
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator>
 ValueType HASH_TABLE_BLOCK_TYPE::ValueAt(slot_offset_t bucket_ind) const {
-  if (IsReadable(bucket_ind) == false) {
-    throw std::runtime_error("Bucket " + std::to_string(bucket_ind) + " is not readable!");
-  }
   return array_[bucket_ind].second;
 }
 
