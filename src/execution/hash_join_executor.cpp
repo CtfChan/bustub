@@ -23,7 +23,14 @@ HashJoinExecutor::HashJoinExecutor(ExecutorContext *exec_ctx, const HashJoinPlan
 /** @return the JHT in use. Do not modify this function, otherwise you will get a zero. */
 // Uncomment me! const HT *GetJHT() const { return &jht_; }
 
-void HashJoinExecutor::Init() {}
+void HashJoinExecutor::Init() {
 
-bool HashJoinExecutor::Next(Tuple *tuple) { return false; }
+}
+
+bool HashJoinExecutor::Next(Tuple *tuple) { 
+  return false; 
+
+}
+
+
 }  // namespace bustub
